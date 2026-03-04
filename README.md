@@ -82,5 +82,3 @@ python scripts/exp0_lqr_sanity.py
 
 **Youssef Kallala**  
 Bachelor Thesis / PFE  
-Continuous-Time Stochastic Optimal Control  
-```
