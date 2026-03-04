@@ -67,6 +67,6 @@ pytest tests/
 
 ## Author
 
-**Y. Kallala**
+**Youssef Kallala**
 Bachelor Thesis / PFE
 Continuous-Time Stochastic Optimal Control
