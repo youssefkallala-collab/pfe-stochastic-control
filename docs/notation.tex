@@ -1,0 +1,80 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Packages for math symbols and formatting ---
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{geometry}
+\usepackage{parskip}
+
+% --- Set page margins ---
+\geometry{
+    top=2.5cm,
+    bottom=2.5cm,
+    left=2.5cm,
+    right=2.5cm
+}
+
+% --- Title Block ---
+\title{\textbf{Notation and Terminology} \\
+\large Deterministic LQR Benchmark (Week 1 \& 2)}
+\author{
+    \textbf{Student:} Youssef Kallala \\[0.5cm]
+    \textbf{Supervisors:} \\
+    R. Tempone \\
+    Erik von Schwerin \\
+    Sebastian Leonardo Lalvay Segovia
+}
+\date{March 2026}
+
+\begin{document}
+
+\maketitle
+
+\noindent This document defines the mathematical notation and its corresponding Python implementation for the deterministic Linear Quadratic Regulator (LQR) benchmark, which serves as the foundational unit test for this project.
+
+\section*{1. Time and Dimensions}
+\begin{itemize}
+    \item $T > 0$ : Finite time horizon.
+    \item $\Delta t$ : Discrete time step size ($\Delta t = T/N$).
+    \item $N \in \mathbb{N}$ : Total number of discrete time steps.
+    \item $d \in \mathbb{N}$ : Dimension of the state space.
+    \item $m \in \mathbb{N}$ : Dimension of the control input.
+\end{itemize}
+
+\section*{2. System Dynamics and State}
+\begin{itemize}
+    \item $X_t \in \mathbb{R}^d$ : State vector at time $t$.
+    \item $y \in \mathbb{R}^d$ : Initial state vector ($X_0 = y$).
+    \item $u_t \in \mathbb{R}^m$ : Control input vector at time $t$.
+    \item $A \in \mathbb{R}^{d \times d}$ : State dynamics matrix.
+    \item $B \in \mathbb{R}^{d \times m}$ : Control input matrix.
+\end{itemize}
+\textit{The continuous-time system evolves according to the ODE: } $\dot{X}_t = A X_t + B u_t$
+
+\section*{3. Cost Function and Riccati Solution}
+\begin{itemize}
+    \item $Q \in \mathbb{S}^d_+$ : Running state cost matrix ($Q \succeq 0$).
+    \item $R \in \mathbb{S}^m_{++}$ : Running control cost matrix ($R \succ 0$).
+    \item $S \in \mathbb{S}^d_+$ : Terminal state cost matrix ($S \succeq 0$).
+    \item $J(u)$ : Total objective cost functional to be minimized.
+    \item $U(t, x)$ : Exact analytical value function ($U(t, x) = x^\top P(t) x$).
+    \item $P(t) \in \mathbb{S}^d_+$ : Solution to the continuous-time backward Riccati ODE.
+    \item $u^\star(t, x)$ : Optimal closed-loop feedback control ($u^\star(t, x) = -R^{-1}B^\top P(t)x$).
+\end{itemize}
+
+\vspace{1cm}
+
+\section*{4. Codebase Variable Mapping (Python)}
+To ensure strict reproducibility, the mathematical notation above is mapped to the following standard Python variables in the \texttt{soc/lqr.py} and \texttt{soc/simulate.py} modules.
+
+\begin{itemize}
+    \item $T, \Delta t, N$ $\mapsto$ \texttt{T}, \texttt{dt}, \texttt{N}
+    \item $X_t, y, u_t$ $\mapsto$ \texttt{X} \textit{(array of shape[N+1, d])}, \texttt{y}, \texttt{u}
+    \item $A, B, Q, R, S$ $\mapsto$ \texttt{A}, \texttt{B}, \texttt{Q}, \texttt{R}, \texttt{S} \textit{(NumPy arrays)}
+    \item $P(t)$ $\mapsto$ \texttt{P} \textit{(array of shape[N+1, d, d] computed backward)}
+    \item $J(u)$ $\mapsto$ \texttt{simulated\_cost} \textit{(Accumulated cost using Euler/RK integration)}
+    \item $y^\top P(0) y$ $\mapsto$ \texttt{analytic\_cost} \textit{(Theoretical exact cost for validation)}
+\end{itemize}
+
+\end{document}

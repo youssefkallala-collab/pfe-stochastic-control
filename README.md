@@ -29,6 +29,7 @@ The project combines:
 
 ```text
 soc/        Core package (Models, Hamiltonian, Simulation, Dual Gradients)
+docs/       LaTeX documents (Notation page, final thesis)
 scripts/    Entry points for running experiments and suites
 tests/      Unit tests for analytic benchmarks (LQR/LQG)
 configs/    Configuration files for reproducibility
@@ -37,6 +38,12 @@ results/    Saved metrics and RNG states
 ```
 
 ---
+
+🧮 Mathematical Notation & Codebase Mapping
+
+To ensure strict consistency between the mathematical formulation and the Python implementation, all variable names and symbols are frozen.
+
+Please see the Notation Page (docs/notation.pdf) for the complete list of symbols, dimensions, and their exact corresponding Python variables in the codebase.
 
 ## Getting Started
 
