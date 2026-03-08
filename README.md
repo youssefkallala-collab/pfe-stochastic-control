@@ -60,7 +60,7 @@ pip install -r requirements.txt
 To verify that the underlying math (e.g., matrix symmetry, LQR analytic costs) is correct across all integration methods (Euler, RK2, RK4), run the automated test suite:
 
 ```bash
-python -m pytest tests/
+python -m pytest -v tests/
 ```
 *(Note: Using `python -m pytest` ensures Python correctly finds the `soc` package in your directory without import errors).*
 
