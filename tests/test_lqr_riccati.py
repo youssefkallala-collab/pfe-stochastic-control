@@ -43,7 +43,6 @@ def test_riccati_symmetry(lqr_params, method):
             err_msg=f"Method '{method}' failed symmetry at time step {i}!"
         )
 
-# We can even assign specific tolerances to each method!
 @pytest.mark.parametrize("method, tolerance",[
     ("euler", 0.05), 
     ("rk2", 0.01), 

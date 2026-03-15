@@ -17,7 +17,7 @@
 
 % --- Title Block ---
 \title{\textbf{Notation and Terminology} \\
-\large Deterministic LQR Benchmark (Week 1 \& 2)}
+\large LQR \& Stochastic LQG Benchmarks (Weeks 1--3)}
 \author{
     \textbf{Student:} Youssef Kallala \\[0.5cm]
     \textbf{Supervisors:} \\
@@ -31,7 +31,7 @@
 
 \maketitle
 
-\noindent This document defines the mathematical notation and its corresponding Python implementation for the deterministic Linear Quadratic Regulator (LQR) benchmark, which serves as the foundational unit test for this project.
+\noindent This document defines the mathematical notation and its corresponding Python implementation for the deterministic Linear Quadratic Regulator (LQR) and stochastic Linear Quadratic Gaussian (LQG) benchmarks, which serve as the foundational unit tests for this project.
 
 \section*{1. Time and Dimensions}
 \begin{itemize}
@@ -40,6 +40,8 @@
     \item $N \in \mathbb{N}$ : Total number of discrete time steps.
     \item $d \in \mathbb{N}$ : Dimension of the state space.
     \item $m \in \mathbb{N}$ : Dimension of the control input.
+    \item $r \in \mathbb{N}$ : Dimension of the Brownian motion.
+    \item $M \in \mathbb{N}$ : Monte Carlo batch size (number of simulated trajectories).
 \end{itemize}
 
 \section*{2. System Dynamics and State}
@@ -47,34 +49,39 @@
     \item $X_t \in \mathbb{R}^d$ : State vector at time $t$.
     \item $y \in \mathbb{R}^d$ : Initial state vector ($X_0 = y$).
     \item $u_t \in \mathbb{R}^m$ : Control input vector at time $t$.
+    \item $W_t \in \mathbb{R}^r$ : Standard $r$-dimensional Brownian motion.
     \item $A \in \mathbb{R}^{d \times d}$ : State dynamics matrix.
     \item $B \in \mathbb{R}^{d \times m}$ : Control input matrix.
+    \item $\Sigma \in \mathbb{R}^{d \times r}$ : Noise diffusion matrix.
 \end{itemize}
-\textit{The continuous-time system evolves according to the ODE: } $\dot{X}_t = A X_t + B u_t$
+\textit{The continuous-time stochastic system evolves according to the It\^o SDE: } 
+$$ dX_t = (A X_t + B u_t) dt + \Sigma dW_t $$
 
 \section*{3. Cost Function and Riccati Solution}
 \begin{itemize}
     \item $Q \in \mathbb{S}^d_+$ : Running state cost matrix ($Q \succeq 0$).
     \item $R \in \mathbb{S}^m_{++}$ : Running control cost matrix ($R \succ 0$).
     \item $S \in \mathbb{S}^d_+$ : Terminal state cost matrix ($S \succeq 0$).
-    \item $J(u)$ : Total objective cost functional to be minimized.
-    \item $U(t, x)$ : Exact analytical value function ($U(t, x) = x^\top P(t) x$).
+    \item $J(u)$ : Expected objective cost functional, $J(u) = \mathbb{E}\Big[ \int_0^T (X_t^\top Q X_t + u_t^\top R u_t) dt + X_T^\top S X_T \Big]$.
     \item $P(t) \in \mathbb{S}^d_+$ : Solution to the continuous-time backward Riccati ODE.
     \item $u^\star(t, x)$ : Optimal closed-loop feedback control ($u^\star(t, x) = -R^{-1}B^\top P(t)x$).
+    \item $J^\star$ : Exact analytic expected cost, $J^\star = y^\top P(0) y + \int_0^T \text{Tr}(\Sigma^\top P(t) \Sigma) dt$.
 \end{itemize}
 
-\vspace{1cm}
+\vspace{0.5cm}
 
 \section*{4. Codebase Variable Mapping (Python)}
-To ensure strict reproducibility, the mathematical notation above is mapped to the following standard Python variables in the \texttt{soc/lqr.py} and \texttt{soc/simulate.py} modules.
+To ensure strict reproducibility, the mathematical notation above is mapped to the following standard Python variables in the \texttt{soc/lqr.py}, \texttt{soc/lqg.py}, and \texttt{soc/simulate.py} modules.
 
 \begin{itemize}
-    \item $T, \Delta t, N$ $\mapsto$ \texttt{T}, \texttt{dt}, \texttt{N}
-    \item $X_t, y, u_t$ $\mapsto$ \texttt{X} \textit{(array of shape[N+1, d])}, \texttt{y}, \texttt{u}
-    \item $A, B, Q, R, S$ $\mapsto$ \texttt{A}, \texttt{B}, \texttt{Q}, \texttt{R}, \texttt{S} \textit{(NumPy arrays)}
-    \item $P(t)$ $\mapsto$ \texttt{P} \textit{(array of shape[N+1, d, d] computed backward)}
-    \item $J(u)$ $\mapsto$ \texttt{simulated\_cost} \textit{(Accumulated cost using Euler/RK integration)}
-    \item $y^\top P(0) y$ $\mapsto$ \texttt{analytic\_cost} \textit{(Theoretical exact cost for validation)}
+    \item $T, \Delta t, N, M$ $\mapsto$ \texttt{T}, \texttt{dt}, \texttt{N}, \texttt{M}
+    \item $X_t, y, u_t$ $\mapsto$ \texttt{X} \textit{(array of shape [N+1, M, d] for LQG)}, \texttt{y}, \texttt{u}
+    \item $A, B, Q, R, S, \Sigma$ $\mapsto$ \texttt{A}, \texttt{B}, \texttt{Q}, \texttt{R}, \texttt{S}, \texttt{Sigma} \textit{(NumPy arrays)}
+    \item $\Delta W_t \sim \sqrt{\Delta t} \mathcal{N}(0, I_r)$ $\mapsto$ \texttt{Z * np.sqrt(dt)} \textit{(Euler-Maruyama stochastic increments)}
+    \item $P(t)$ $\mapsto$ \texttt{P} \textit{(array of shape [N+1, d, d] computed backward)}
+    \item $\hat{J}_M$ $\mapsto$ \texttt{mc\_cost\_mean} \textit{(Monte Carlo empirical average cost over $M$ runs)}
+    \item $J^\star$ $\mapsto$ \texttt{analytic\_cost} \textit{(Theoretical exact cost for validation)}
+    \item $\sigma / \sqrt{M}$ $\mapsto$ \texttt{std\_err} \textit{(Standard statistical error of the Monte Carlo estimator)}
 \end{itemize}
 
 \end{document}

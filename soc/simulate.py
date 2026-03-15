@@ -75,3 +75,51 @@ def simulate_lqr(A, B, Q, R, S, P, y, N, T, method='rk4'):
     J[-1] += X[N].T @ S @ X[N]
     
     return X, J
+def simulate_lqg_euler_maruyama(A, B, R, P, y, Sigma, N, T, M):
+    """Simulates M stochastic trajectories simultaneously using Euler-Maruyama."""
+    dt = T / N
+    d = len(y)
+    r = Sigma.shape[1]
+    
+    X = np.zeros((N + 1, M, d))
+    X[0, :, :] = y
+    
+    R_inv = np.linalg.inv(R)
+    
+    for i in range(N):
+        # Optimal feedback matrix K at time i
+        K = -R_inv @ B.T @ P[i]
+        
+        # Calculate control for all M trajectories
+        u = X[i] @ K.T
+        
+        # Drift and Diffusion
+        drift = X[i] @ A.T + u @ B.T
+        Z = np.random.randn(M, r)
+        diffusion = Z @ Sigma.T
+        
+        # Euler-Maruyama Step
+        X[i+1] = X[i] + drift * dt + diffusion * np.sqrt(dt)
+        
+    return X
+
+def compute_lqg_mc_costs(X, P, Q, R, S, B, N, T):
+    """Calculates the accumulated cost for all M trajectories."""
+    dt = T / N
+    M = X.shape[1]
+    R_inv = np.linalg.inv(R)
+    
+    costs = np.zeros(M)
+    for i in range(N):
+        K = -R_inv @ B.T @ P[i]
+        u = X[i] @ K.T
+        
+        # Fast batched quadratic form
+        state_cost = np.sum((X[i] @ Q) * X[i], axis=1)
+        control_cost = np.sum((u @ R) * u, axis=1)
+        costs += (state_cost + control_cost) * dt
+        
+    terminal_cost = np.sum((X[N] @ S) * X[N], axis=1)
+    costs += terminal_cost
+    
+    return costs
