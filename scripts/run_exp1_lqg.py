@@ -28,8 +28,8 @@ Sigma = np.array([[0.1, 0.0], [0.0, 0.1]])
 y = np.array([1.0, 1.0])
 N, T = 200, 1.0
 
-M_values  =[50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
-N_values  =[10, 20, 50, 100, 200, 500, 1000, 2000, 5000]  # varies for plot 3
+M_values  = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+N_values  = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]  # varies for plot 3
 M_fixed   = 5000   # fixed M for the N-convergence experiment
 n_repeats = 200
 confidence = 0.95
@@ -49,10 +49,10 @@ analytic_cost = compute_lqg_analytic_cost(P, y, Sigma, N, T)
 alpha  = 1.0 - confidence
 t_crit = stats.t.ppf(1 - alpha / 2, df=n_repeats - 1)
 
-means, ci_lo, ci_hi = [], [],[]
+means, ci_lo, ci_hi = [], [], []
 
 for M_val in M_values:
-    run_errors =[]
+    run_errors = []
     for _ in range(n_repeats):
         X_mc  = simulate_lqg_euler_maruyama(A, B, R, P, y, Sigma, N, T, M_val)
         costs = compute_lqg_mc_costs(X_mc, P, Q, R, S, B, N, T)
@@ -71,20 +71,18 @@ for M_val in M_values:
 # ==========================================
 # 3b. DISCRETIZATION CONVERGENCE IN N (fixed M)
 # ==========================================
-# For each N we need a fresh P and a reference cost at that N,
-# then we compare against the finest-grid reference (N_ref).
 N_ref      = 50000                                          # "ground truth" time grid
 P_ref      = solve_dre(A, B, Q, R, S, N_ref, T, 'euler')
 cost_ref   = compute_lqg_analytic_cost(P_ref, y, Sigma, N_ref, T)
 
 print(f"\nRunning N-convergence experiment (M={M_fixed} fixed)...\n")
 
-means_N, ci_lo_N, ci_hi_N = [], [],[]
+means_N, ci_lo_N, ci_hi_N = [], [], []
 
 for N_val in N_values:
-    P_n    = solve_dre(A, B, Q, R, S, N_val, T, 'euler')
+    P_n = solve_dre(A, B, Q, R, S, N_val, T, 'euler')
 
-    run_errors_N =[]
+    run_errors_N = []
     for _ in range(n_repeats):
         X_mc  = simulate_lqg_euler_maruyama(A, B, R, P_n, y, Sigma, N_val, T, M_fixed)
         costs = compute_lqg_mc_costs(X_mc, P_n, Q, R, S, B, N_val, T)
@@ -101,14 +99,20 @@ for N_val in N_values:
     print(f"N={N_val:<6} | Mean Error: {mean_err:.4e} | 95% CI:[{lo:.4e}, {hi:.4e}]")
 
 # ==========================================
-# 4. VISUALIZATION (3 plots)
+# 4. SETUP SAVE PATHS
 # ==========================================
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(21, 6))
+script_dir   = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '..'))
+figures_folder = os.path.join(project_root, 'figures')
+os.makedirs(figures_folder, exist_ok=True)
 
-# --- Plot 1: SDE Trajectories ---
+# ==========================================
+# 5. PLOT 1: SDE Trajectories
+# ==========================================
 X_plot     = simulate_lqg_euler_maruyama(A, B, R, P, y, Sigma, N, T, M=50)
 time_steps = np.linspace(0, T, N + 1)
 
+fig1, ax1 = plt.subplots(figsize=(7, 6))
 for m in range(50):
     ax1.plot(time_steps, X_plot[:, m, 0], color='blue', alpha=0.15)
 ax1.plot(time_steps, np.mean(X_plot[:, :, 0], axis=1), color='red', lw=2, label="MC Mean Trajectory")
@@ -117,8 +121,17 @@ ax1.set_xlabel("Time (s)")
 ax1.set_ylabel("State $x_1$")
 ax1.grid(True)
 ax1.legend()
+plt.tight_layout()
+save_path1 = os.path.join(figures_folder, 'exp1_plot1_trajectories.png')
+fig1.savefig(save_path1, dpi=300, bbox_inches='tight')
+print(f"\n Plot 1 saved to: {save_path1}")
+plt.show()
+plt.close(fig1)
 
-# --- Plot 2: MC Convergence in M ---
+# ==========================================
+# 6. PLOT 2: MC Convergence in M
+# ==========================================
+fig2, ax2 = plt.subplots(figsize=(7, 6))
 ax2.fill_between(M_values, ci_lo, ci_hi, color='steelblue', alpha=0.20,
                  label=f"{int(confidence*100)}% Confidence Interval")
 ax2.loglog(M_values, means,  marker='o', color='steelblue', linewidth=2, markersize=7, label="Mean MC Error")
@@ -139,17 +152,25 @@ ax2.set_xlabel("Number of Trajectories $M$")
 ax2.set_ylabel(r"$|\hat{J}_M - J^*|$")
 ax2.grid(True, which="both", ls="--", alpha=0.5)
 ax2.legend(fontsize=9)
+plt.tight_layout()
+save_path2 = os.path.join(figures_folder, 'exp1_plot2_mc_convergence.png')
+fig2.savefig(save_path2, dpi=300, bbox_inches='tight')
+print(f" Plot 2 saved to: {save_path2}")
+plt.show()
+plt.close(fig2)
 
-# --- Plot 3: Discretization Convergence in N ---
+# ==========================================
+# 7. PLOT 3: Discretization Convergence in N
+# ==========================================
 dt_values = [T / N_val for N_val in N_values]   # x-axis: step size Δt
 
+fig3, ax3 = plt.subplots(figsize=(7, 6))
 ax3.fill_between(dt_values, ci_lo_N, ci_hi_N, color='darkorange', alpha=0.20,
                  label=f"{int(confidence*100)}% Confidence Interval")
 ax3.loglog(dt_values, means_N,  marker='s', color='darkorange', linewidth=2, markersize=7, label="Mean Discretization Error")
 ax3.loglog(dt_values, ci_lo_N,  linestyle=':', color='darkorange', linewidth=1, alpha=0.6)
 ax3.loglog(dt_values, ci_hi_N,  linestyle=':', color='darkorange', linewidth=1, alpha=0.6)
 
-# Euler-Maruyama has weak order 1 so the bias scales as O(Δt)
 ref_N = [means_N[0] * (dt / dt_values[0]) for dt in dt_values]
 ax3.loglog(dt_values, ref_N, linestyle='--', color='gray', alpha=0.7, label=r"$\mathcal{O}(\Delta t)$")
 
@@ -164,23 +185,16 @@ ax3.set_xlabel(r"Time Step $\Delta t = T/N$")
 ax3.set_ylabel(r"$|\hat{J}_N - J^*_{\mathrm{ref}}|$")
 ax3.grid(True, which="both", ls="--", alpha=0.5)
 ax3.legend(fontsize=9)
-
 plt.tight_layout()
+save_path3 = os.path.join(figures_folder, 'exp1_plot3_discretization_convergence.png')
+fig3.savefig(save_path3, dpi=300, bbox_inches='tight')
+print(f" Plot 3 saved to: {save_path3}")
+plt.show()
+plt.close(fig3)
 
 # ==========================================
-# 5. ABSOLUTE PATH SAVING & REPRODUCIBILITY
+# 8. SAVE METADATA
 # ==========================================
-script_dir   = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(script_dir, '..'))
-
-# 1. Save the Figure
-figures_folder = os.path.join(project_root, 'figures')
-os.makedirs(figures_folder, exist_ok=True)
-save_path = os.path.join(figures_folder, 'exp1_lqg_benchmark.png')
-plt.savefig(save_path, dpi=300, bbox_inches='tight')
-print(f"\n Plot successfully saved to: {save_path}")
-
-# 2. Save the Metadata (Git Hash, Seed, Parameters)
 results_folder = os.path.join(project_root, 'results')
 metadata = {
     "experiment": "Exp1_LQG_Benchmark_Advanced",
@@ -193,5 +207,3 @@ metadata = {
     "n_repeats_for_CI": n_repeats
 }
 save_experiment_metadata(results_folder, "exp1_lqg", metadata)
-
-plt.show()
