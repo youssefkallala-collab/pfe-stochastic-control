@@ -1,4 +1,3 @@
-```markdown
 # PFE: Continuous-Time Stochastic Optimal Control
 
 **Student:** Youssef Kallala  
