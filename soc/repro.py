@@ -1,7 +1,24 @@
 import os
 import json
 import subprocess
+import random
+import numpy as np
+import torch
 from datetime import datetime
+
+def set_seed(seed=42):
+    """Fixes all random seeds for reproducibility across CPU and GPU."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        
+    # Force deterministic operations on the GPU
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    print(f" Random seed strictly set to {seed}")
 
 def get_git_commit_hash():
     """Retrieves the current Git commit hash of the repository."""

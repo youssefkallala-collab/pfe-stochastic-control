@@ -1,4 +1,9 @@
 import numpy as np
+import torch
+import math
+# Ensure you are importing your partials functions
+from soc.potential import compute_partials
+from soc.hamiltonian import compute_hamiltonian_partials
 
 def lqr_system_dynamics(x, P_curr, A, B, Q, R, R_inv):
     """
@@ -123,3 +128,58 @@ def compute_lqg_mc_costs(X, P, Q, R, S, B, N, T):
     costs += terminal_cost
     
     return costs
+
+def simulate_nn_policy_euler_maruyama(u_theta, cfg):
+    """
+    Simulates stochastic trajectories using the PINN Hamiltonian-Partials Reformulation.
+    Drift = dH/dlambda, Diffusion = sqrt(2 dH/dV).
+    No running cost is accumulated since the PINN solves the value directly.
+    """
+    # Initialize State Tensor: shape (Steps, Trajectories, State Dim, 1)
+    X = torch.zeros(cfg.N + 1, cfg.M, cfg.state_dim, 1, device=cfg.device)
+    
+    # Broadcast the initial state to all M trajectories
+    # Note: Using cfg.y or cfg.y_init based on your models.py naming
+    X[0, :, :, 0] = cfg.y.unsqueeze(0).expand(cfg.M, -1)
+    
+    # Switch network to evaluation mode (disables dropout/batchnorm/gradient graphs)
+    u_theta.eval() 
+    
+    for i in range(cfg.N):
+        t_val = i * cfg.dt
+        t_tensor = torch.full((cfg.M, 1), t_val, device=cfg.device)
+        
+        # We MUST set requires_grad=True to calculate spatial derivatives
+        x_tensor = X[i].clone().detach().requires_grad_(True)
+        
+        # 1. Autodiff Partials (From soc.potential)
+        # Extracts Value, Spatial Gradient (lambda), and Spatial Hessian
+        _, _, grad_u, hessian_u = compute_partials(u_theta, t_tensor, x_tensor)        
+        # Ensure Hessian is perfectly symmetric for numerical stability
+        hessian_u = 0.5 * (hessian_u + hessian_u.transpose(1, 2))
+        
+        # 2. Hamiltonian Partials (From soc.hamiltonian)
+        # We ignore the 3rd return value (d_gamma_H / Cost) completely!
+        d_lambda_H, d_V_H, _ = compute_hamiltonian_partials(cfg, x_tensor, grad_u, hessian_u)
+        
+        # 3. Construct Diffusion Matrix from d_V_H
+        # Diffusion G = 2.0 * dH/dV
+        G = 2.0 * d_V_H
+        G = 0.5 * (G + G.transpose(1, 2)) # Enforce symmetry for Cholesky
+        
+        # Calculate Sigma via Cholesky decomposition
+        Sigma = torch.linalg.cholesky(G)
+        
+        # 4. Euler-Maruyama Noise
+        xi = torch.randn(cfg.M, cfg.state_dim, 1, device=cfg.device)
+        dW = math.sqrt(cfg.dt) * xi
+        noise = torch.bmm(Sigma, dW) 
+        
+        # 5. Update state (Using d_lambda_H as the optimal Drift)
+        X[i+1] = x_tensor.detach() + (d_lambda_H.detach() * cfg.dt) + noise
+        
+    # Re-enable training mode
+    u_theta.train()
+    
+    # Return ONLY the trajectories (no cost tensor anymore)
+    return X.detach()

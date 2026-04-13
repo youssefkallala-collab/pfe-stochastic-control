@@ -40,24 +40,13 @@ def plot_combined_convergence(N_values, errs_euler, errs_rk2, errs_rk4):
 
 def plot_cost_evolution(trajs_coarse, trajs_fine, analytic_cost, T, N_coarse, N_fine):
     """
-    Side-by-side subplots showing cost evolution at a coarse and a fine grid.
-
-    Left panel  (coarse N): differences between methods are clearly visible.
-    Right panel (fine N):   all methods have converged; analytic cost value annotated.
-
-    Parameters
-    ----------
-    trajs_coarse  : dict  {'euler': array, 'rk2': array, 'rk4': array}
-    trajs_fine    : dict  {'euler': array, 'rk2': array, 'rk4': array}
-    analytic_cost : float  True cost y^T P(0) y from the finest DRE solve.
-    T             : float  Total time horizon.
-    N_coarse      : int    Number of steps used for the coarse trajectories.
-    N_fine        : int    Number of steps used for the fine trajectories.
+    Side-by-side subplots showing decreasing Cost-to-Go evolution.
+    Smooths out the terminal cost jump so the function is continuous.
     """
     method_styles = {
         'euler': ('Euler', 'blue',   '-'),
         'rk2':   ('RK2',   'orange', '--'),
-        'rk4':   ('RK4',   'purple', ':'),
+        'rk4':   ('RK4',   'purple', '-.'),
     }
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=False)
@@ -67,25 +56,42 @@ def plot_cost_evolution(trajs_coarse, trajs_fine, analytic_cost, T, N_coarse, N_
         (axes[1], trajs_fine,   N_fine,   f"Fine Grid  (N = {N_fine})",     True),
     ]:
         for key, (label, color, ls) in method_styles.items():
-            J = trajs[key]
-            t = np.linspace(0, T, len(J))
-            ax.plot(t, J, color=color, linestyle=ls, linewidth=2,
-                    label=f"{label}  [final: {J[-1]:.5f}]")
+            J_accum = trajs[key]
+            t = np.linspace(0, T, len(J_accum))
+            
+            # 1. Isolate the massive terminal cost jump at the end
+            # Since running cost is smooth, we can extrapolate the final step
+            run_step = J_accum[-2] - J_accum[-3]
+            smooth_final_run = J_accum[-2] + run_step
+            
+            # The terminal cost is whatever massive spike was added on top
+            terminal_cost = J_accum[-1] - smooth_final_run
+            
+            # 2. Smooth out the running cost array to remove the cliff
+            J_running = J_accum.copy()
+            J_running[-1] = smooth_final_run
+            
+            # 3. Calculate True Cost-to-Go (Value Function)
+            # (Total Running Cost + Terminal Cost) - Running Cost Paid So Far
+            J_decreasing = (J_running[-1] + terminal_cost) - J_running
+            
+            ax.plot(t, J_decreasing, color=color, linestyle=ls, linewidth=2,
+                    label=f"{label}  [initial: {J_decreasing[0]:.5f}]")
 
-        # Red horizontal line for the analytic cost — show exact value only on fine plot
-        analytic_label = (f"Analytic cost: {analytic_cost:.5f}"
-                          if show_analytic_value else "Analytic cost")
+        # Red horizontal line for the analytic cost (now at the TOP of the plot)
+        analytic_label = (f"Analytic initial cost: {analytic_cost:.5f}"
+                          if show_analytic_value else "Analytic initial cost")
         ax.axhline(analytic_cost, color='red', linestyle='--', linewidth=1.5,
                    label=analytic_label)
 
         ax.set_title(title)
         ax.set_xlabel("Time $t$")
-        ax.set_ylabel("Cumulative Cost $J(t)$")
+        ax.set_ylabel("Cost-to-Go $V(t)$")
         ax.grid(True, ls="--", alpha=0.5)
-        ax.legend(title="Method  [final cost]", fontsize=9)
+        ax.legend(title="Method  [initial cost]", fontsize=9)
 
-    fig.suptitle("Cost Evolution: Coarse vs Fine Integration Grid",
-                 fontsize=13, fontweight='bold')
+    fig.suptitle("Cost-to-Go Evolution: Decreasing Value Function",
+                 fontsize=14, fontweight='bold')
     fig.tight_layout()
 
     os.makedirs('figures', exist_ok=True)
