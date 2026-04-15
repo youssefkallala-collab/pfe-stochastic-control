@@ -65,98 +65,58 @@ def main():
         noise_penalty[i] = accumulated_noise
 
     # ---------------------------------------------------------
-    # B. EVALUATE STATIC POINT OVER TIME (Plots 1 & 2)
+    # B. EVALUATE ALONG THE TRAJECTORY X_t
     # ---------------------------------------------------------
     t_grid = np.linspace(0, cfg.T, cfg.N)
-    
-    V_nn_vals = np.zeros(cfg.N)
-    V_true_vals = np.zeros(cfg.N)
-    grad_nn_norm = np.zeros(cfg.N)
-    grad_true_norm = np.zeros(cfg.N)
-    
-    x_val_np = cfg.y_init.cpu().numpy().flatten()
-    x_tensor = cfg.y_init.clone().to(cfg.device).unsqueeze(0).requires_grad_(True)
-    
-    for i in range(cfg.N):
-        # 1. Exact
-        deterministic_val = float(x_val_np.T @ P_exact[i] @ x_val_np)
-        V_true_vals[i] = deterministic_val + noise_penalty[i]
-        
-        grad_true_i = 2.0 * (P_exact[i] @ x_val_np)
-        grad_true_norm[i] = np.linalg.norm(grad_true_i)
-
-        # 2. NN
-        t_tensor = torch.tensor([[t_grid[i]]], dtype=torch.float32, device=cfg.device)
-        V_nn_i = u_theta(t_tensor, x_tensor)
-        V_nn_vals[i] = V_nn_i.item()
-        
-        grad_nn_i = torch.autograd.grad(
-            outputs=V_nn_i, 
-            inputs=x_tensor,
-            grad_outputs=torch.ones_like(V_nn_i),
-            create_graph=False
-        )[0]
-        grad_nn_norm[i] = torch.norm(grad_nn_i).item()
-        
-    # ---------------------------------------------------------
-    # C. EVALUATE ALONG THE TRAJECTORY X_t (Plot 3)
-    # ---------------------------------------------------------
 
     V_nn_trajectory = np.zeros(cfg.N)
     V_true_trajectory = np.zeros(cfg.N)
-    state_dim = x_val_np.shape[0]  # Dynamically get state dimension (e.g., 2)
+    grad_nn_trajectory = np.zeros(cfg.N)
+    grad_true_trajectory = np.zeros(cfg.N)
+    
+    state_dim = cfg.state_dim 
     
     for i in range(cfg.N):
         # 1. Cleanly extract states and force shape to (batch_size, state_dim)
-        X_tensor = X_nn[i].view(-1, state_dim)
+        # We detach and require_grad to compute autograd over the simulation states
+        X_tensor = X_nn[i].view(-1, state_dim).detach()
+        X_tensor.requires_grad_(True)
         X_t = X_tensor.detach().cpu().numpy() 
         actual_batch = X_t.shape[0] # Handle any batch size dynamically
         
-        # 2. Exact Cost along X_t
-        # X_t is (batch, 2), P_exact[i] is (2, 2) -> safe to multiply
+        # 2. Exact Cost and Gradient along X_t
+        # Cost Batch
         cost_batch = np.sum((X_t @ P_exact[i]) * X_t, axis=1) + noise_penalty[i]
         V_true_trajectory[i] = cost_batch.mean()
         
-        # 3. NN Cost along X_t
+        # Gradient Batch
+        grad_true_batch = 2.0 * (X_t @ P_exact[i])
+        grad_true_norm_batch = np.linalg.norm(grad_true_batch, axis=1)
+        grad_true_trajectory[i] = grad_true_norm_batch.mean()
+        
+        # 3. NN Cost and Gradient along X_t
         t_tensor = torch.full((actual_batch, 1), t_grid[i], dtype=torch.float32, device=cfg.device)
-        V_nn_i = u_theta(t_tensor, X_tensor)
-        V_nn_trajectory[i] = V_nn_i.mean().item()
+        V_nn_batch = u_theta(t_tensor, X_tensor)
+        V_nn_trajectory[i] = V_nn_batch.mean().item()
+        
+        # Autograd for the batch
+        grad_nn_batch = torch.autograd.grad(
+            outputs=V_nn_batch, 
+            inputs=X_tensor,
+            grad_outputs=torch.ones_like(V_nn_batch),
+            create_graph=False
+        )[0]
+        
+        # Gradient norm across the batch
+        grad_nn_norm_batch = torch.norm(grad_nn_batch, dim=1)
+        grad_nn_trajectory[i] = grad_nn_norm_batch.mean().item()
 
     # ---------------------------------------------------------
-    # D. GENERATE ALL COMPARISON PLOTS
+    # C. GENERATE COMPARISON PLOTS
     # ---------------------------------------------------------
-    clean_x = [int(val) for val in x_val_np]
     
-    # PLOT 1: VALUE FUNCTION COMPARISON
-    plt.figure(1, figsize=(7, 6))
-    plt.plot(t_grid, V_nn_vals, color='#2ca02c', linewidth=2.5, label="PINN Value")
-    plt.plot(t_grid, V_true_vals, color='red', linestyle='--', linewidth=2.5, label="Exact Theoretical Value")
-    plt.xlabel("Time (t)", fontsize=12)
-    plt.ylabel("Value V(t,x)", fontsize=12)
-    plt.title(f"Value Function Comparison at x = {clean_x}", fontsize=14, fontweight='bold')
-    plt.grid(True, alpha=0.4, linestyle="--")
-    plt.legend(fontsize=12)
-    plt.tight_layout()
-    save_path_value = "figures/exp2_value_comparison.png"
-    plt.savefig(save_path_value, dpi=300, bbox_inches='tight')
-    print(f"Success! Value comparison plot saved to: {save_path_value}")
-
-    # PLOT 2: GRADIENT NORM (POLICY) COMPARISON
-    plt.figure(2, figsize=(7, 6))
-    plt.plot(t_grid, grad_nn_norm, color='#1f77b4', linewidth=2.5, label="PINN Gradient Norm")
-    plt.plot(t_grid, grad_true_norm, color='red', linestyle='--', linewidth=2.5, label="Exact Theoretical Gradient")
-    plt.xlabel("Time (t)", fontsize=12)
-    plt.ylabel(r"$|| \nabla_x V ||$", fontsize=14)
-    plt.title(f"Policy (Gradient) Comparison at x = {clean_x}", fontsize=14, fontweight='bold')
-    plt.grid(True, alpha=0.4, linestyle="--")
-    plt.legend(fontsize=12)
-    plt.tight_layout()
-    save_path_policy = "figures/exp2_policy_comparison.png"
-    plt.savefig(save_path_policy, dpi=300, bbox_inches='tight')
-    print(f"Success! Policy comparison plot saved to: {save_path_policy}")
-    
-    # PLOT 3: TRAJECTORY COMPARISON
-    plt.figure(3, figsize=(8, 6))
+    # PLOT 1: TRAJECTORY POTENTIAL COMPARISON
+    plt.figure(1, figsize=(8, 6))
     plt.plot(t_grid, V_true_trajectory, color='gray', linewidth=5, alpha=0.6, 
              label=f'Exact Theoretical Value \n[Initial: {V_true_trajectory[0]:.4f}]')
     plt.plot(t_grid, V_nn_trajectory, color='purple', linewidth=2.5, linestyle='--', 
@@ -171,7 +131,23 @@ def main():
     plt.savefig(save_path_trajectory, dpi=300, bbox_inches='tight')
     print(f"Success! Trajectory comparison plot saved to: {save_path_trajectory}")
     
-    # Show all three plots at the end!
+    # PLOT 2: TRAJECTORY GRADIENT (POLICY) COMPARISON
+    plt.figure(2, figsize=(8, 6))
+    plt.plot(t_grid, grad_true_trajectory, color='lightcoral', linewidth=5, alpha=0.6, 
+             label='Exact Theoretical Gradient')
+    plt.plot(t_grid, grad_nn_trajectory, color='#1f77b4', linewidth=2.5, linestyle='--', 
+             label='PINN Gradient')
+    plt.title("Trajectory Gradient (Policy): PINN vs. Exact Theory", fontsize=15, fontweight='bold')
+    plt.xlabel("Time (t)", fontsize=12)
+    plt.ylabel(r"Gradient Norm $|| \nabla_x V ||$", fontsize=12)
+    plt.grid(True, ls="--", alpha=0.5)
+    plt.legend(fontsize=12)
+    plt.tight_layout()
+    save_path_grad_trajectory = "figures/exp2_trajectory_gradient_comparison.png"
+    plt.savefig(save_path_grad_trajectory, dpi=300, bbox_inches='tight')
+    print(f"Success! Trajectory gradient comparison plot saved to: {save_path_grad_trajectory}")
+    
+    # Show both plots at the end!
     plt.show()
 
 if __name__ == "__main__":
